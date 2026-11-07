@@ -1,9 +1,95 @@
-export type SoundId = 'none' | 'lofi' | 'piano' | 'rain' | 'ocean' | 'brown';
+export type BuiltInSoundId = 'none' | 'lofi' | 'piano' | 'rain' | 'ocean' | 'brown';
+export type FileSoundId = `file:${string}`;
+export type SoundId = BuiltInSoundId | FileSoundId | `custom:${string}`;
 
 export interface SoundMeta {
-	id: SoundId;
+	id: BuiltInSoundId;
 	label: string;
 	description: string;
+}
+
+export interface FileSoundMeta {
+	id: FileSoundId;
+	label: string;
+	description: string;
+	src: string;
+}
+
+export const MUSIC: FileSoundMeta[] = [
+	{
+		id: 'file:classical',
+		label: 'Classical',
+		description: 'Orchestral study piece',
+		src: '/audio/classical.mp3'
+	},
+	{
+		id: 'file:among-mountains',
+		label: 'Among Mountains',
+		description: 'Calm highland ambience',
+		src: '/audio/Amongmountains.mp3'
+	},
+	{
+		id: 'file:brain-stimulating',
+		label: 'Brain Stimulating',
+		description: 'Bright, energizing focus',
+		src: '/audio/Brainstimualating.mp3'
+	},
+	{
+		id: 'file:cozy-morning',
+		label: 'Cozy Morning',
+		description: 'Warm, gentle start',
+		src: '/audio/Cozymorning.mp3'
+	},
+	{
+		id: 'file:happy-life',
+		label: 'Happy Life',
+		description: 'Light and upbeat',
+		src: '/audio/happylife.mp3'
+	},
+	{
+		id: 'file:doing-well',
+		label: 'I Am Doing Well',
+		description: 'Uplifting and steady',
+		src: '/audio/Iamdoingwell.mp3'
+	},
+	{
+		id: 'file:latin-lofi',
+		label: 'Latin Lo-fi',
+		description: 'Lo-fi with a latin groove',
+		src: '/audio/Latinlofi.mp3'
+	},
+	{
+		id: 'file:night-sky',
+		label: 'Night Sky',
+		description: 'Quiet late-night focus',
+		src: '/audio/Nightsky.mp3'
+	},
+	{
+		id: 'file:possible-dreams',
+		label: 'Possible Dreams',
+		description: 'Dreamy, soft textures',
+		src: '/audio/Possibledreams.mp3'
+	},
+	{
+		id: 'file:soul-calming',
+		label: 'Soul Calming',
+		description: 'Slow, soothing tones',
+		src: '/audio/Soul-calming.mp3'
+	},
+	{
+		id: 'file:studying',
+		label: 'Studying',
+		description: 'Straightforward study flow',
+		src: '/audio/Studying.mp3'
+	}
+];
+
+export function isFileSoundId(value: unknown): value is FileSoundId {
+	return typeof value === 'string' && value.startsWith('file:');
+}
+
+export function findFileSound(id: unknown): FileSoundMeta | undefined {
+	return MUSIC.find((sound) => sound.id === id);
 }
 
 export const SOUNDS: SoundMeta[] = [
@@ -13,6 +99,10 @@ export const SOUNDS: SoundMeta[] = [
 	{ id: 'ocean', label: 'Ocean', description: 'Rolling waves on a shore' },
 	{ id: 'brown', label: 'Brown noise', description: 'A deep, even focus blanket' }
 ];
+
+export function isBuiltInSoundId(value: unknown): value is BuiltInSoundId {
+	return value === 'none' || SOUNDS.some((sound) => sound.id === value);
+}
 
 const A4_FREQUENCY = 440;
 const A4_MIDI = 69;
@@ -421,7 +511,7 @@ function createPiano(context: AudioContext, destination: AudioNode) {
 export function createSoundscape(
 	context: AudioContext,
 	destination: AudioNode,
-	id: SoundId
+	id: BuiltInSoundId
 ): () => void {
 	switch (id) {
 		case 'lofi':

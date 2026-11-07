@@ -1,25 +1,55 @@
 import { browser } from '$app/env';
-import { createSoundscape, SOUNDS, type SoundId } from '#lib/audio/soundscape.ts';
+import {
+	createSoundscape,
+	findFileSound,
+	isBuiltInSoundId,
+	isFileSoundId,
+	SOUNDS,
+	type SoundId
+} from '#lib/audio/soundscape.ts';
 
 const STORAGE_KEY = 'lockin:sound';
 const DEFAULT_VOLUME = 0.55;
+const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|weba|webm|wma|aiff?)$/i;
 
-function isSoundId(value: unknown): value is SoundId {
-	return value === 'none' || SOUNDS.some((sound) => sound.id === value);
+export interface CustomTrack {
+	id: `custom:${string}`;
+	label: string;
+	url: string;
+}
+
+function isAudioFile(file: File) {
+	return file.type.startsWith('audio/') || AUDIO_EXTENSIONS.test(file.name);
+}
+
+function createId() {
+	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+		return crypto.randomUUID();
+	}
+	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 class AudioStore {
 	track = $state<SoundId>('none');
 	volume = $state(DEFAULT_VOLUME);
 	playing = $state(false);
+	customTracks = $state<CustomTrack[]>([]);
 
 	private context: AudioContext | null = null;
 	private master: GainNode | null = null;
 	private stopCurrent: (() => void) | null = null;
+	private mediaElement: HTMLAudioElement | null = null;
+	private mediaSource: MediaElementAudioSourceNode | null = null;
+	private playToken = 0;
 	private initialized = false;
 
 	get currentLabel() {
-		return SOUNDS.find((sound) => sound.id === this.track)?.label ?? 'No sound';
+		return (
+			SOUNDS.find((sound) => sound.id === this.track)?.label ??
+			findFileSound(this.track)?.label ??
+			this.customTracks.find((track) => track.id === this.track)?.label ??
+			'No sound'
+		);
 	}
 
 	init() {
@@ -30,7 +60,11 @@ class AudioStore {
 			const raw = localStorage.getItem(STORAGE_KEY);
 			if (raw) {
 				const stored = JSON.parse(raw) as { track?: unknown; volume?: unknown } | null;
-				if (stored && isSoundId(stored.track)) this.track = stored.track;
+				if (stored && (isBuiltInSoundId(stored.track) || findFileSound(stored.track))) {
+					this.track = stored.track as SoundId;
+				} else {
+					this.track = 'none';
+				}
 				if (stored && typeof stored.volume === 'number' && Number.isFinite(stored.volume)) {
 					this.volume = Math.min(1, Math.max(0, stored.volume));
 				}
@@ -46,6 +80,20 @@ class AudioStore {
 			return;
 		}
 
+		if (id.startsWith('custom:')) {
+			const custom = this.customTracks.find((track) => track.id === id);
+			if (custom) await this.playMedia(custom.url, custom.id);
+			return;
+		}
+
+		if (isFileSoundId(id)) {
+			const file = findFileSound(id);
+			if (file) await this.playMedia(file.src, file.id);
+			return;
+		}
+
+		if (!isBuiltInSoundId(id)) return;
+
 		const context = this.ensureContext();
 		if (!context || !this.master) return;
 
@@ -59,6 +107,7 @@ class AudioStore {
 
 		this.stopCurrent?.();
 		this.stopCurrent = null;
+		this.stopMedia();
 
 		this.track = id;
 		this.playing = true;
@@ -69,6 +118,7 @@ class AudioStore {
 	pause() {
 		this.stopCurrent?.();
 		this.stopCurrent = null;
+		this.stopMedia();
 		this.playing = false;
 		this.persist();
 	}
@@ -90,6 +140,100 @@ class AudioStore {
 		}
 
 		this.persist();
+	}
+
+	addCustomTracks(files: FileList | File[]): number {
+		if (!browser) return 0;
+
+		let added = 0;
+
+		for (const file of Array.from(files)) {
+			if (!isAudioFile(file)) continue;
+
+			const id: CustomTrack['id'] = `custom:${createId()}`;
+			const label = file.name.replace(/\.[^.]+$/, '') || file.name;
+			const url = URL.createObjectURL(file);
+
+			this.customTracks.push({ id, label, url });
+			added += 1;
+		}
+
+		return added;
+	}
+
+	removeCustomTrack(id: SoundId) {
+		const index = this.customTracks.findIndex((track) => track.id === id);
+		if (index === -1) return;
+
+		if (this.track === id) this.pause();
+
+		const [removed] = this.customTracks.splice(index, 1);
+		if (removed) URL.revokeObjectURL(removed.url);
+	}
+
+	private async playMedia(src: string, id: SoundId) {
+		const context = this.ensureContext();
+		if (!context || !this.master) return;
+
+		if (context.state === 'suspended') {
+			try {
+				await context.resume();
+			} catch {
+				return;
+			}
+		}
+
+		this.stopCurrent?.();
+		this.stopCurrent = null;
+
+		const token = this.stopMedia();
+		const element = this.getMediaElement(context);
+
+		element.src = src;
+
+		try {
+			await element.play();
+		} catch {
+			if (token === this.playToken) element.pause();
+			return;
+		}
+
+		if (token !== this.playToken) {
+			element.pause();
+			return;
+		}
+
+		this.track = id;
+		this.playing = true;
+		this.persist();
+	}
+
+	private getMediaElement(context: AudioContext) {
+		if (!this.mediaElement) {
+			const element = new Audio();
+			element.loop = true;
+			element.preload = 'auto';
+
+			const source = context.createMediaElementSource(element);
+			source.connect(this.master as GainNode);
+
+			this.mediaElement = element;
+			this.mediaSource = source;
+		}
+
+		return this.mediaElement;
+	}
+
+	private stopMedia() {
+		const token = ++this.playToken;
+
+		if (this.mediaElement) {
+			this.mediaElement.pause();
+			this.mediaElement.removeAttribute('src');
+			this.mediaElement.load();
+		}
+
+		return token;
 	}
 
 	private ensureContext() {

@@ -17,7 +17,7 @@
 					? 'Good morning'
 					: hour < 18
 						? 'Good afternoon'
-						: 'Good evening';
+						: 'Good night';
 		dateLabel = now.toLocaleDateString(undefined, {
 			weekday: 'long',
 			month: 'long',

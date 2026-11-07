@@ -1,12 +1,30 @@
 <script lang="ts">
-	import { SOUNDS } from '#lib/audio/soundscape.ts';
+	import { MUSIC, SOUNDS } from '#lib/audio/soundscape.ts';
 	import { audio } from '#lib/state/audio.svelte.ts';
-	import { AudioLines, CloudRain, Disc3, Piano, Volume2, VolumeX, Waves } from 'lucide-svelte';
+	import {
+		AudioLines,
+		CloudRain,
+		Disc3,
+		Music4,
+		Piano,
+		Trash2,
+		Upload,
+		Volume2,
+		VolumeX,
+		Waves
+	} from 'lucide-svelte';
 
 	let { compact = false }: { compact?: boolean } = $props();
+
+	function handleFiles(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const files = input.files;
+		if (files && files.length > 0) audio.addCustomTracks(files);
+		input.value = '';
+	}
 </script>
 
-<div class="sound-picker" class:compact>
+<div class={['sound-picker', { compact }]}>
 	<div class="sound-head">
 		<div>
 			<p class="sound-eyebrow">Soundscape</p>
@@ -20,8 +38,7 @@
 	<div class="sound-grid" role="group" aria-label="Ambient sound">
 		<button
 			type="button"
-			class="sound-option"
-			class:active={!audio.playing}
+			class={['sound-option', { active: !audio.playing }]}
 			aria-pressed={!audio.playing}
 			onclick={() => audio.pause()}
 		>
@@ -36,8 +53,7 @@
 			{@const active = audio.playing && audio.track === sound.id}
 			<button
 				type="button"
-				class="sound-option"
-				class:active
+				class={['sound-option', { active }]}
 				aria-pressed={active}
 				onclick={() => audio.toggle(sound.id)}
 			>
@@ -63,7 +79,70 @@
 				{/if}
 			</button>
 		{/each}
+
+		{#each MUSIC as track (track.id)}
+			{@const active = audio.playing && audio.track === track.id}
+			<button
+				type="button"
+				class={['sound-option', { active }]}
+				aria-pressed={active}
+				onclick={() => audio.toggle(track.id)}
+			>
+				<span class="sound-icon"><Music4 size={18} /></span>
+				<span class="sound-copy">
+					<span class="sound-name">{track.label}</span>
+					<span class="sound-desc">{track.description}</span>
+				</span>
+				{#if active}
+					<span class="playing-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+				{/if}
+			</button>
+		{/each}
+
+		{#each audio.customTracks as custom (custom.id)}
+			{@const active = audio.playing && audio.track === custom.id}
+			<div class="sound-row">
+				<button
+					type="button"
+					class={['sound-option', { active }]}
+					aria-pressed={active}
+					onclick={() => audio.toggle(custom.id)}
+				>
+					<span class="sound-icon"><Music4 size={18} /></span>
+					<span class="sound-copy">
+						<span class="sound-name">{custom.label}</span>
+						<span class="sound-desc">From your device</span>
+					</span>
+					{#if active}
+						<span class="playing-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+					{/if}
+				</button>
+				<button
+					type="button"
+					class="sound-remove"
+					aria-label={`Remove ${custom.label}`}
+					onclick={(event) => {
+						event.stopPropagation();
+						audio.removeCustomTrack(custom.id);
+					}}
+				>
+					<Trash2 size={15} />
+				</button>
+			</div>
+		{/each}
 	</div>
+
+	<label class="sound-upload">
+		<input
+			class="sound-upload-input"
+			type="file"
+			accept="audio/*"
+			multiple
+			onchange={handleFiles}
+		/>
+		<Upload size={16} />
+		<span>Add music from device</span>
+	</label>
 
 	<label class="volume">
 		<Volume2 size={16} />
@@ -232,6 +311,68 @@
 		animation-delay: 300ms;
 	}
 
+	.sound-row {
+		display: flex;
+		align-items: stretch;
+		gap: 0.35rem;
+		min-width: 0;
+	}
+
+	.sound-row .sound-option {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.sound-remove {
+		display: grid;
+		place-items: center;
+		width: 34px;
+		flex-shrink: 0;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		background: rgba(255, 255, 255, 0.025);
+		color: var(--text-dim);
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease;
+	}
+
+	.sound-remove:hover {
+		background: rgba(255, 255, 255, 0.06);
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+
+	.sound-upload {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.6rem 0.8rem;
+		border: 1px dashed var(--border);
+		border-radius: 12px;
+		background: rgba(255, 255, 255, 0.02);
+		color: var(--text-muted);
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			background 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease;
+	}
+
+	.sound-upload:hover {
+		background: rgba(255, 255, 255, 0.05);
+		border-color: var(--border-strong);
+		color: var(--text);
+	}
+
+	.sound-upload-input {
+		display: none;
+	}
+
 	.volume {
 		display: flex;
 		align-items: center;
@@ -298,6 +439,14 @@
 
 	.compact .sound-desc {
 		display: none;
+	}
+
+	.compact .sound-remove {
+		width: 30px;
+	}
+
+	.compact .sound-upload {
+		padding: 0.5rem 0.6rem;
 	}
 
 	@keyframes bar {

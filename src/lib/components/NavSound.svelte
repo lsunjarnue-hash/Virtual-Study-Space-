@@ -100,6 +100,9 @@
 		right: 0;
 		z-index: 60;
 		width: min(330px, calc(100vw - 1.75rem));
+		max-height: min(70vh, calc(100vh - 6rem));
+		overflow-y: auto;
+		overscroll-behavior: contain;
 		padding: 1rem;
 		border: 1px solid var(--border);
 		border-radius: 20px;
